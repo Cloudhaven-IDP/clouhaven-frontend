@@ -1,0 +1,103 @@
+name: request-streamlit-ui • CI & Push to ECR
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - "request-streamlit/**"
+      - ".github/workflows/request-streamlit.yml"
+
+
+env:
+  AWS_REGION: us-east-1
+  ECR_REPOSITORY_URI: 305285325217.dkr.ecr.us-east-1.amazonaws.com/cloudhaven-frontend-ecr
+
+jobs:
+  upstream-ci:
+    name: Upstream CI (lint, test, buildx)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Upstream composite
+        uses: Cloudhaven-IDP/actions/.github/actions/python-ci@main
+        with:
+          workdir: request-streamlit
+          python-version: "3.11"
+          dockerfile: request-streamlit/Dockerfile
+
+  push-ecr:
+    name: Buildx & push ARM64 → ECR
+    needs: [upstream-ci]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      image_uri_latest: ${{ steps.outs.outputs.image_uri_latest }}
+      image_uri_tagged: ${{ steps.outs.outputs.image_uri_tagged }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure AWS creds (tf_temp)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID_TF_TEMP }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY_TF_TEMP }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to ECR
+        id: ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Compute tags
+        id: tags
+        run: |
+          SHORT_SHA="${GITHUB_SHA::7}"
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            BASE_TAG="pr-${SHORT_SHA}"
+          else
+            BASE_TAG="main-${SHORT_SHA}"
+          fi
+          EXTRA="${{ github.event.inputs.extra_tag }}"
+          if [[ -n "$EXTRA" ]]; then
+            echo "EXTRA_TAG=$EXTRA" >> $GITHUB_OUTPUT
+          fi
+          echo "BASE_TAG=$BASE_TAG" >> $GITHUB_OUTPUT
+          echo "SHORT_SHA=$SHORT_SHA" >> $GITHUB_OUTPUT
+
+      - name: Buildx push (linux/arm64)
+        working-directory: request-streamlit
+        run: |
+          IMAGE="${{ env.ECR_REPOSITORY_URI }}"
+          docker buildx build \
+            --platform linux/arm64 \
+            --push \
+            -t "${IMAGE}:${{ steps.tags.outputs.BASE_TAG }}" \
+            -t "${IMAGE}:latest" \
+            .
+          if [[ -n "${{ steps.tags.outputs.EXTRA_TAG }}" ]]; then
+            docker buildx imagetools create \
+              -t "${IMAGE}:${{ steps.tags.outputs.EXTRA_TAG }}" \
+              "${IMAGE}:${{ steps.tags.outputs.BASE_TAG }}"
+          fi
+
+      - name: Outputs
+        id: outs
+        run: |
+          echo "image_uri_latest=${{ env.ECR_REPOSITORY_URI }}:latest" >> $GITHUB_OUTPUT
+          echo "image_uri_tagged=${{ env.ECR_REPOSITORY_URI }}:${{ steps.tags.outputs.BASE_TAG }}" >> $GITHUB_OUTPUT
+
+      - name: Summary
+        run: |
+          echo "Pushed:"
+          echo "  ${{ env.ECR_REPOSITORY_URI }}:${{ steps.tags.outputs.BASE_TAG }}"
+          echo "  ${{ env.ECR_REPOSITORY_URI }}:latest"
+          if [ -n "${{ steps.tags.outputs.EXTRA_TAG }}" ]; then
+            echo "  ${{ env.ECR_REPOSITORY_URI }}:${{ steps.tags.outputs.EXTRA_TAG }}"
+          fi
