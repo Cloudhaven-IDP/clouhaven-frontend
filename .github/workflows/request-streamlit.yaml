@@ -6,7 +6,16 @@ on:
     paths:
       - "request-streamlit/**"
       - ".github/workflows/request-streamlit.yaml"
-
+  pull_request:
+    branches: [ main ]
+    paths:
+      - "request-streamlit/**"
+  workflow_dispatch:
+    inputs:
+      extra_tag:
+        description: "Optional extra image tag (e.g., v0.1.0)"
+        required: false
+        default: ""
 
 env:
   AWS_REGION: us-east-1
@@ -18,7 +27,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Upstream composite
-        uses: Cloudhaven-IDP/actions/python-ci/action.yaml@main
+        uses: Cloudhaven-IDP/Actions/python-ci@main
         with:
           workdir: request-streamlit
           python-version: "3.11"
@@ -101,5 +110,3 @@ jobs:
           if [ -n "${{ steps.tags.outputs.EXTRA_TAG }}" ]; then
             echo "  ${{ env.ECR_REPOSITORY_URI }}:${{ steps.tags.outputs.EXTRA_TAG }}"
           fi
-
-
