@@ -5,7 +5,7 @@ on:
     branches: [ main ]
     paths:
       - "request-streamlit/**"
-      - ".github/workflows/request-streamlit.yml"
+      - ".github/workflows/request-streamlit.yaml"
 
 
 env:
