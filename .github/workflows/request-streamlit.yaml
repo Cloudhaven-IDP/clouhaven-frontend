@@ -18,7 +18,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Upstream composite
-        uses: Cloudhaven-IDP/actions/.github/actions/python-ci@main
+        uses: Cloudhaven-IDP/actions/python-ci/action.yaml@main
         with:
           workdir: request-streamlit
           python-version: "3.11"
