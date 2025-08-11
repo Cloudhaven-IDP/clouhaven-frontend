@@ -2,7 +2,6 @@ import os
 import time
 import requests
 import streamlit as st
-#from logic import RequestPayload, send_request
 
 # ------ Config (env) ------
 REQUEST_API_URL = os.getenv("REQUEST_API_URL", "http://localhost:8088/v1/requests")
